@@ -1,0 +1,1436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lingua — Language Translation Tool</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Fonts: Playfair Display (editorial serif) + DM Sans (clean sans) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ink:    '#0f1117',
+            panel:  '#181c27',
+            border: '#252b3b',
+            muted:  '#4a5270',
+            cream:  '#f0ead8',
+            gold:   '#c9973a',
+            'gold-light': '#e6b55a',
+          },
+          fontFamily: {
+            display: ['"Playfair Display"', 'Georgia', 'serif'],
+            body:    ['"DM Sans"', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      background-color: #0f1117;
+      font-family: 'DM Sans', sans-serif;
+      color: #f0ead8;
+      min-height: 100vh;
+    }
+
+    /* Subtle grid texture overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(201,151,58,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(201,151,58,0.03) 1px, transparent 1px);
+      background-size: 48px 48px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .main-wrap { position: relative; z-index: 1; }
+
+    /* Glowing amber accent bar at top */
+    .top-bar {
+      height: 3px;
+      background: linear-gradient(90deg, transparent, #c9973a 40%, #e6b55a 60%, transparent);
+    }
+
+    /* Translation card panels */
+    .lang-panel {
+      background: #181c27;
+      border: 1px solid #252b3b;
+      transition: border-color 0.2s;
+    }
+    .lang-panel:focus-within {
+      border-color: #c9973a55;
+    }
+
+    textarea {
+      background: transparent;
+      color: #f0ead8;
+      resize: none;
+      outline: none;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 1rem;
+      line-height: 1.7;
+      width: 100%;
+    }
+    textarea::placeholder { color: #4a5270; }
+
+    /* Select dropdowns */
+    select {
+      background: #252b3b;
+      color: #f0ead8;
+      border: 1px solid #333d52;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.85rem;
+      appearance: none;
+      padding: 0.45rem 2rem 0.45rem 0.75rem;
+      border-radius: 0.375rem;
+      cursor: pointer;
+      transition: border-color 0.2s;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23c9973a' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.6rem center;
+    }
+    select:focus { outline: none; border-color: #c9973a; }
+    select option { background: #181c27; }
+
+    /* Translate button */
+    .btn-translate {
+      background: linear-gradient(135deg, #c9973a, #e6b55a);
+      color: #0f1117;
+      font-weight: 600;
+      font-family: 'DM Sans', sans-serif;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font-size: 0.8rem;
+      padding: 0.65rem 2rem;
+      border-radius: 0.375rem;
+      border: none;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.15s;
+      position: relative;
+      overflow: hidden;
+    }
+    .btn-translate:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn-translate:active { transform: translateY(0); }
+    .btn-translate:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    /* Spinner */
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid rgba(15,17,23,0.3);
+      border-top-color: #0f1117;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Result fade-in */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .fade-up { animation: fadeUp 0.35s ease forwards; }
+
+    /* Character counter */
+    .char-count { font-size: 0.75rem; color: #4a5270; }
+    .char-count.warn { color: #e6b55a; }
+    .char-count.over { color: #e05c5c; }
+
+    /* Error pill */
+    .error-pill {
+      background: rgba(224,92,92,0.12);
+      border: 1px solid rgba(224,92,92,0.35);
+      color: #f08080;
+      border-radius: 0.375rem;
+      padding: 0.6rem 1rem;
+      font-size: 0.85rem;
+    }
+
+    /* Divider label */
+    .divider-label {
+      display: flex; align-items: center; gap: 0.75rem;
+      color: #4a5270; font-size: 0.75rem; letter-spacing: 0.1em;
+      text-transform: uppercase; margin: 0.25rem 0;
+    }
+    .divider-label::before, .divider-label::after {
+      content: ''; flex: 1; height: 1px; background: #252b3b;
+    }
+
+    /* Language badge in output */
+    .lang-badge {
+      display: inline-block;
+      background: rgba(201,151,58,0.12);
+      border: 1px solid rgba(201,151,58,0.3);
+      color: #c9973a;
+      font-size: 0.7rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 0.15rem 0.5rem;
+      border-radius: 9999px;
+    }
+
+    /* Swap button */
+    .btn-swap {
+      background: #252b3b;
+      border: 1px solid #333d52;
+      color: #c9973a;
+      border-radius: 50%;
+      width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
+      flex-shrink: 0;
+    }
+    .btn-swap:hover { background: #2e3549; }
+    .btn-swap.spinning { transform: rotate(180deg); }
+
+    /* Auto-detect badge shown in output */
+    .detected-badge {
+      display: inline-flex; align-items: center; gap: 0.3rem;
+      background: rgba(92,168,224,0.1);
+      border: 1px solid rgba(92,168,224,0.3);
+      color: #7ec8e3;
+      font-size: 0.7rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 0.15rem 0.55rem;
+      border-radius: 9999px;
+    }
+
+    /* Copy button */
+    .btn-copy {
+      background: transparent;
+      border: 1px solid #333d52;
+      color: #4a5270;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.72rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 0.3rem 0.75rem;
+      border-radius: 0.3rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex; align-items: center; gap: 0.3rem;
+    }
+    .btn-copy:hover { border-color: #c9973a; color: #c9973a; }
+    .btn-copy.copied {
+      border-color: #5cb85c; color: #5cb85c;
+      pointer-events: none;
+    }
+
+    /* Page load animation */
+    .main-card {
+      animation: fadeUp 0.5s ease 0.1s both;
+    }
+
+    /* ── Document Translation Section ─────────────────────────────────────── */
+    .doc-panel {
+      background: #181c27;
+      border: 1px solid #252b3b;
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+      margin-top: 2rem;
+      animation: fadeUp 0.5s ease 0.3s both;
+    }
+
+    .doc-header {
+      display: flex; align-items: center; gap: 0.6rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .doc-upload-box {
+      border: 2px dashed #333d52;
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: rgba(25,28,39,0.5);
+    }
+    .doc-upload-box:hover {
+      border-color: #c9973a;
+      background: rgba(201,151,58,0.05);
+    }
+    .doc-upload-box.dragging {
+      border-color: #e6b55a;
+      background: rgba(201,151,58,0.1);
+    }
+
+    .doc-upload-icon {
+      font-size: 2.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .doc-upload-text {
+      font-size: 0.85rem;
+      color: #4a5270;
+      margin-bottom: 0.3rem;
+    }
+    .doc-upload-hint {
+      font-size: 0.72rem;
+      color: #333d52;
+    }
+
+    /* File input (hidden) */
+    #docFile {
+      display: none;
+    }
+
+    /* Document info section */
+    .doc-info {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+
+    .doc-select-group {
+      display: flex; flex-direction: column; gap: 0.5rem;
+    }
+    .doc-select-group label {
+      font-size: 0.75rem;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: #4a5270;
+      font-weight: 500;
+    }
+
+    .doc-translate-btn {
+      background: linear-gradient(135deg, #c9973a, #e6b55a);
+      color: #0f1117;
+      font-weight: 600;
+      font-family: 'DM Sans', sans-serif;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font-size: 0.8rem;
+      padding: 0.65rem 1.5rem;
+      border-radius: 0.375rem;
+      border: none;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.15s;
+      margin-top: 1rem;
+      width: 100%;
+    }
+    .doc-translate-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+    .doc-translate-btn:active { transform: translateY(0); }
+    .doc-translate-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Document status messages */
+    .doc-status {
+      margin-top: 1rem;
+      padding: 0.75rem 1rem;
+      border-radius: 0.375rem;
+      font-size: 0.85rem;
+      display: none;
+    }
+    .doc-status.active { display: block; }
+    .doc-status.success {
+      background: rgba(92,184,92,0.12);
+      border: 1px solid rgba(92,184,92,0.3);
+      color: #7cbf7c;
+    }
+    .doc-status.error {
+      background: rgba(224,92,92,0.12);
+      border: 1px solid rgba(224,92,92,0.35);
+      color: #f08080;
+    }
+    .doc-status.loading {
+      background: rgba(201,151,58,0.12);
+      border: 1px solid rgba(201,151,58,0.3);
+      color: #c9973a;
+    }
+
+    .doc-file-name {
+      font-size: 0.8rem;
+      color: #c8bfa8;
+      margin-top: 0.5rem;
+      word-break: break-word;
+    }
+    .btn-audio {
+      background: transparent;
+      border: 1px solid #333d52;
+      color: #4a5270;
+      border-radius: 0.3rem;
+      padding: 0.28rem 0.55rem;
+      cursor: pointer;
+      display: inline-flex; align-items: center; gap: 0.25rem;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.7rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      transition: all 0.2s;
+    }
+    .btn-audio:hover { border-color: #c9973a; color: #c9973a; }
+    .btn-audio:disabled { opacity: 0.3; cursor: not-allowed; }
+    .btn-audio.speaking {
+      border-color: #e6b55a; color: #e6b55a;
+      animation: pulse-gold 1s ease-in-out infinite;
+    }
+
+    /* Mic button — distinct style */
+    .btn-mic {
+      background: transparent;
+      border: 1px solid #333d52;
+      color: #4a5270;
+      border-radius: 50%;
+      width: 32px; height: 32px;
+      display: inline-flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+    .btn-mic:hover { border-color: #c9973a; color: #c9973a; }
+    .btn-mic.recording {
+      border-color: #e05c5c;
+      color: #e05c5c;
+      background: rgba(224,92,92,0.08);
+      animation: pulse-red 1s ease-in-out infinite;
+    }
+    .btn-mic:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    @keyframes pulse-gold {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(201,151,58,0); }
+      50%       { box-shadow: 0 0 0 4px rgba(201,151,58,0.2); }
+    }
+    @keyframes pulse-red {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(224,92,92,0); }
+      50%       { box-shadow: 0 0 0 6px rgba(224,92,92,0.2); }
+    }
+
+    /* STT status label */
+    .stt-status {
+      font-size: 0.72rem;
+      color: #e05c5c;
+      display: none;
+      align-items: center;
+      gap: 0.3rem;
+    }
+    .stt-status.active { display: inline-flex; }
+    .stt-dot {
+      width: 6px; height: 6px;
+      background: #e05c5c;
+      border-radius: 50%;
+      animation: pulse-red-dot 1s ease-in-out infinite;
+    }
+    @keyframes pulse-red-dot {
+      0%, 100% { opacity: 1; } 50% { opacity: 0.3; }
+    }
+
+    /* ── History Sidebar ──────────────────────────────────────────────────── */
+    .history-sidebar {
+      background: #181c27;
+      border: 1px solid #252b3b;
+      border-radius: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      max-height: 640px;
+      overflow: hidden;
+    }
+
+    .history-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid #252b3b;
+      flex-shrink: 0;
+    }
+
+    .history-list {
+      overflow-y: auto;
+      flex: 1;
+      padding: 0.5rem 0;
+      scrollbar-width: thin;
+      scrollbar-color: #252b3b transparent;
+    }
+    .history-list::-webkit-scrollbar { width: 4px; }
+    .history-list::-webkit-scrollbar-track { background: transparent; }
+    .history-list::-webkit-scrollbar-thumb { background: #252b3b; border-radius: 2px; }
+
+    /* Individual history entry */
+    .hist-entry {
+      padding: 0.85rem 1.25rem;
+      border-bottom: 1px solid #1e2333;
+      cursor: pointer;
+      transition: background 0.15s;
+      animation: fadeUp 0.25s ease forwards;
+    }
+    .hist-entry:last-child { border-bottom: none; }
+    .hist-entry:hover { background: rgba(201,151,58,0.05); }
+
+    .hist-pair {
+      display: flex; align-items: center; gap: 0.4rem;
+      margin-bottom: 0.45rem;
+    }
+    .hist-lang-chip {
+      font-size: 0.62rem;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      background: #252b3b;
+      color: #4a5270;
+      padding: 0.1rem 0.4rem;
+      border-radius: 3px;
+    }
+    .hist-arrow { color: #333d52; font-size: 0.65rem; }
+
+    .hist-source {
+      font-size: 0.78rem;
+      color: #4a5270;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 0.25rem;
+      font-style: italic;
+    }
+    .hist-result {
+      font-size: 0.82rem;
+      color: #c8bfa8;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .hist-time {
+      font-size: 0.65rem;
+      color: #333d52;
+      margin-top: 0.3rem;
+      text-align: right;
+    }
+
+    /* Empty state */
+    .hist-empty {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 0.6rem;
+      padding: 2.5rem 1rem; color: #333d52; text-align: center;
+    }
+
+    /* Clear button */
+    .btn-clear-hist {
+      background: transparent;
+      border: none;
+      color: #4a5270;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.7rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      cursor: pointer;
+      padding: 0.2rem 0.4rem;
+      border-radius: 0.25rem;
+      transition: color 0.2s;
+    }
+    .btn-clear-hist:hover { color: #e05c5c; }
+
+    /* Count badge */
+    .hist-count-badge {
+      background: rgba(201,151,58,0.15);
+      color: #c9973a;
+      font-size: 0.65rem;
+      font-weight: 600;
+      padding: 0.1rem 0.45rem;
+      border-radius: 9999px;
+      min-width: 1.2rem;
+      text-align: center;
+    }
+
+    /* Two-column layout on md+ */
+    @media (min-width: 900px) {
+      .page-grid {
+        display: grid;
+        grid-template-columns: 1fr 272px;
+        gap: 1.5rem;
+        align-items: start;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Amber accent bar -->
+  <div class="top-bar"></div>
+
+  <div class="main-wrap max-w-4xl mx-auto px-4 py-12">
+
+    <!-- Header -->
+    <header class="text-center mb-12" style="animation: fadeUp 0.5s ease both;">
+      <p class="text-gold text-xs tracking-widest uppercase mb-3 font-body font-medium">CodeAlpha AI Internship Project</p>
+      <h1 class="font-display text-5xl md:text-6xl text-cream mb-3">
+        Lin<em>gua</em>
+      </h1>
+      <p class="text-muted text-sm font-body font-light max-w-xs mx-auto leading-relaxed">
+        Accurate, instant language translation powered by Google Translate
+      </p>
+    </header>
+
+    <!-- Two-column grid: main card + history sidebar -->
+    <div class="page-grid">
+
+      <!-- ── Main Card ────────────────────────────────────────────────────── -->
+      <div class="main-card lang-panel rounded-xl p-6 md:p-8 shadow-2xl">
+
+      <!-- Language Selectors Row -->
+      <div class="flex items-center gap-3 mb-6">
+        <div class="flex-1">
+          <label class="block text-muted text-xs uppercase tracking-widest mb-1.5 font-body">Source Language</label>
+          <select id="sourceLang" class="w-full"></select>
+        </div>
+
+        <!-- Swap button -->
+        <div class="flex-shrink-0 mt-5">
+          <button class="btn-swap" id="swapBtn" onclick="swapLanguages()" title="Swap languages">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M7 16V4m0 0L3 8m4-4l4 4"/><path d="M17 8v12m0 0l4-4m-4 4l-4-4"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="flex-1">
+          <label class="block text-muted text-xs uppercase tracking-widest mb-1.5 font-body">Target Language</label>
+          <select id="targetLang" class="w-full"></select>
+        </div>
+      </div>
+
+      <!-- Input Area -->
+      <div class="mb-2">
+        <label class="block text-muted text-xs uppercase tracking-widest mb-2 font-body">Text to Translate</label>
+        <div class="lang-panel rounded-lg p-4">
+          <textarea
+            id="sourceText"
+            rows="5"
+            maxlength="5000"
+            placeholder="Enter your text here… or tap the mic to speak"
+          ></textarea>
+        </div>
+        <div class="flex justify-between items-center mt-1.5 px-1">
+          <!-- Left: mic + listen source + STT status -->
+          <div class="flex items-center gap-2">
+            <button class="btn-mic" id="micBtn" onclick="toggleMic()" title="Speak to input text">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
+            </button>
+            <button class="btn-audio" id="listenSourceBtn" onclick="speakSource()" title="Listen to source text">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+              </svg>
+              Listen
+            </button>
+            <span class="stt-status font-body" id="sttStatus">
+              <span class="stt-dot"></span>
+              Listening…
+            </span>
+          </div>
+          <!-- Right: char counter -->
+          <span class="char-count font-body" id="charCount">0 / 5000</span>
+        </div>
+      </div>
+
+      <!-- Translate Button -->
+      <div class="flex justify-center my-6">
+        <button id="translateBtn" class="btn-translate" onclick="doTranslate()">
+          Translate
+        </button>
+      </div>
+
+      <!-- Output Section -->
+      <div id="outputSection" class="hidden">
+        <div class="divider-label font-body">Translation</div>
+
+        <div id="errorBox" class="hidden error-pill mt-4 font-body"></div>
+
+        <div id="resultBox" class="hidden mt-4">
+          <div class="lang-panel rounded-lg p-4">
+            <div class="flex justify-between items-center mb-3">
+              <div class="flex items-center gap-2">
+                <span class="lang-badge font-body" id="resultLangBadge">—</span>
+                <span id="detectedBadge" class="detected-badge font-body hidden">
+                  <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"><circle cx="4" cy="4" r="4"/></svg>
+                  Auto-detected
+                </span>
+              </div>
+              <div class="flex items-center gap-3">
+                <span class="text-muted text-xs font-body" id="wordCountBadge"></span>
+                <button class="btn-audio font-body" id="listenResultBtn" onclick="speakResult()" title="Listen to translation">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                  </svg>
+                  Listen
+                </button>
+                <button class="btn-copy font-body" id="copyBtn" onclick="copyResult()">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                  </svg>
+                  Copy
+                </button>
+              </div>
+            </div>
+            <p id="resultText" class="text-cream font-body text-base leading-relaxed fade-up"></p>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /main-card -->
+
+      <!-- ── History Sidebar ───────────────────────────────────────────────── -->
+      <aside class="history-sidebar" style="animation: fadeUp 0.5s ease 0.2s both;">
+        <div class="history-header">
+          <div class="flex items-center gap-2">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#c9973a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <span class="font-body text-cream text-xs font-medium tracking-wide uppercase">History</span>
+            <span class="hist-count-badge font-body" id="histCount">0</span>
+          </div>
+          <button class="btn-clear-hist font-body" onclick="clearHistory()" title="Clear all history">Clear</button>
+        </div>
+
+        <div class="history-list" id="historyList">
+          <!-- Empty state (shown by default) -->
+          <div class="hist-empty" id="histEmpty">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/>
+            </svg>
+            <p class="font-body text-xs leading-relaxed">Your translations<br/>will appear here</p>
+          </div>
+        </div>
+      </aside>
+
+    </div><!-- /page-grid -->
+
+    <!-- ── Document Translation Section ───────────────────────────────────── -->
+    <div class="doc-panel">
+      <div class="doc-header">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c9973a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="19" x2="12" y2="11"/><line x1="9" y1="14" x2="15" y2="14"/>
+        </svg>
+        <h2 class="font-body text-cream font-semibold">Document Translation</h2>
+      </div>
+
+      <!-- Upload zone -->
+      <div class="doc-upload-box" id="docDropZone" onclick="document.getElementById('docFile').click()">
+        <div class="doc-upload-icon">📄</div>
+        <div class="doc-upload-text font-body">Click to upload or drag & drop</div>
+        <div class="doc-upload-hint font-body">Supports .txt and .docx files (max 10 MB)</div>
+      </div>
+      <input type="file" id="docFile" accept=".txt,.docx" onchange="handleDocFileSelect(event)"/>
+
+      <!-- File name display -->
+      <div class="doc-file-name font-body" id="docFileName"></div>
+
+      <!-- Language selectors -->
+      <div class="doc-info">
+        <div class="doc-select-group">
+          <label for="docSourceLang" class="font-body">Source Language</label>
+          <select id="docSourceLang" class="w-full"></select>
+        </div>
+        <div class="doc-select-group">
+          <label for="docTargetLang" class="font-body">Target Language</label>
+          <select id="docTargetLang" class="w-full"></select>
+        </div>
+      </div>
+
+      <!-- Translate button -->
+      <button class="doc-translate-btn font-body" id="docTranslateBtn" onclick="translateDocument()" disabled>
+        Translate Document
+      </button>
+
+      <!-- Status message -->
+      <div class="doc-status font-body" id="docStatus"></div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="text-center mt-10 text-muted text-xs font-body font-light tracking-wide">
+      Built with FastAPI · deep-translator · Web Speech API · Tailwind CSS &nbsp;·&nbsp; Phase 5
+    </footer>
+
+  </div>
+
+  <script>
+    const API_BASE = '';  // same origin
+
+    // ── Translation History (session-only, max 50 entries) ──────────────────
+    const MAX_HISTORY = 50;
+    let translationHistory = [];  // [ { id, sourceText, translatedText, sourceLang, targetLang, sourceLangName, targetLangName, timestamp } ]
+
+    function addToHistory(sourceText, translatedText, sourceLang, targetLang) {
+      const sourceSel  = document.getElementById('sourceLang');
+      const targetSel  = document.getElementById('targetLang');
+      const sourceName = sourceLang === 'auto'
+        ? 'Auto'
+        : (sourceSel.querySelector(`option[value="${sourceLang}"]`)?.text || sourceLang);
+      const targetName = targetSel.querySelector(`option[value="${targetLang}"]`)?.text || targetLang;
+
+      const entry = {
+        id: Date.now(),
+        sourceText,
+        translatedText,
+        sourceLang,
+        targetLang,
+        sourceLangName: sourceName,
+        targetLangName: targetName,
+        timestamp: new Date(),
+      };
+
+      // Deduplicate: skip if identical to most recent entry
+      if (translationHistory.length > 0) {
+        const last = translationHistory[0];
+        if (last.sourceText === sourceText && last.targetLang === targetLang) return;
+      }
+
+      translationHistory.unshift(entry);
+      if (translationHistory.length > MAX_HISTORY) translationHistory.pop();
+      renderHistory();
+    }
+
+    function formatTime(date) {
+      const now  = new Date();
+      const diff = Math.floor((now - date) / 1000);
+      if (diff < 5)  return 'just now';
+      if (diff < 60) return `${diff}s ago`;
+      if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function renderHistory() {
+      const list    = document.getElementById('historyList');
+      const empty   = document.getElementById('histEmpty');
+      const counter = document.getElementById('histCount');
+
+      counter.textContent = translationHistory.length;
+
+      if (translationHistory.length === 0) {
+        list.innerHTML = '';
+        list.appendChild(empty);
+        empty.classList.remove('hidden');
+        return;
+      }
+
+      // Remove empty state from DOM if present
+      if (empty.parentNode === list) list.removeChild(empty);
+
+      // Rebuild the list
+      list.innerHTML = '';
+      translationHistory.forEach((entry) => {
+        const el = document.createElement('div');
+        el.className = 'hist-entry';
+        el.title = 'Click to reload this translation';
+        el.innerHTML = `
+          <div class="hist-pair">
+            <span class="hist-lang-chip font-body">${entry.sourceLangName}</span>
+            <span class="hist-arrow">→</span>
+            <span class="hist-lang-chip font-body">${entry.targetLangName}</span>
+          </div>
+          <div class="hist-source font-body">${escHtml(truncate(entry.sourceText, 60))}</div>
+          <div class="hist-result font-body">${escHtml(truncate(entry.translatedText, 70))}</div>
+          <div class="hist-time font-body">${formatTime(entry.timestamp)}</div>
+        `;
+        el.addEventListener('click', () => loadFromHistory(entry));
+        list.appendChild(el);
+      });
+    }
+
+    function loadFromHistory(entry) {
+      // Populate source text
+      const srcEl = document.getElementById('sourceText');
+      srcEl.value = entry.sourceText;
+      srcEl.dispatchEvent(new Event('input'));
+
+      // Set language selectors
+      const sourceSel = document.getElementById('sourceLang');
+      const targetSel = document.getElementById('targetLang');
+      if (sourceSel.querySelector(`option[value="${entry.sourceLang}"]`)) {
+        sourceSel.value = entry.sourceLang;
+      }
+      if (targetSel.querySelector(`option[value="${entry.targetLang}"]`)) {
+        targetSel.value = entry.targetLang;
+      }
+
+      // Show the cached result instantly
+      showResult(entry.translatedText, entry.targetLang, entry.sourceLang === 'auto', entry.sourceLang);
+
+      // Scroll to top on mobile
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function clearHistory() {
+      translationHistory = [];
+      renderHistory();
+    }
+
+    function escHtml(str) {
+      return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function truncate(str, max) {
+      return str.length > max ? str.slice(0, max) + '…' : str;
+    }
+
+    // Refresh timestamps every 30s so "just now" → "30s ago" etc.
+    setInterval(() => {
+      if (translationHistory.length > 0) renderHistory();
+    }, 30000);
+
+    // ── Populate language dropdowns ──────────────────────────────────────────
+    async function loadLanguages() {
+      try {
+        const res = await fetch(`${API_BASE}/languages`);
+        if (!res.ok) throw new Error('Failed to load languages');
+        const langs = await res.json(); // { "English": "en", ... }
+
+        const sourceSel = document.getElementById('sourceLang');
+        const targetSel = document.getElementById('targetLang');
+
+        // Auto-Detect option (source only)
+        sourceSel.add(new Option('Auto-Detect', 'auto'));
+
+        const sorted = Object.entries(langs).sort((a, b) => a[0].localeCompare(b[0]));
+
+        sorted.forEach(([name, code]) => {
+          sourceSel.add(new Option(name, code));
+          targetSel.add(new Option(name, code));
+        });
+
+        // Sensible defaults: Auto-Detect → Spanish
+        sourceSel.value = 'auto';
+        targetSel.value = 'es';
+      } catch (err) {
+        console.error('Language load error:', err);
+      }
+    }
+
+    // ── Swap Languages ───────────────────────────────────────────────────────
+    function swapLanguages() {
+      const sourceSel = document.getElementById('sourceLang');
+      const targetSel = document.getElementById('targetLang');
+      const btn       = document.getElementById('swapBtn');
+
+      // Don't swap if source is Auto-Detect (no meaningful swap)
+      if (sourceSel.value === 'auto') {
+        // Just set source to the current target language
+        const targetVal = targetSel.value;
+        targetSel.value = 'en'; // fallback target to English
+        sourceSel.value = targetVal;
+      } else {
+        const srcVal = sourceSel.value;
+        const tgtVal = targetSel.value;
+        sourceSel.value = tgtVal;
+        targetSel.value = srcVal;
+      }
+
+      // Swap the textarea text with result text if a result exists
+      const resultText  = document.getElementById('resultText').textContent;
+      const sourceText  = document.getElementById('sourceText');
+      if (resultText) {
+        sourceText.value = resultText;
+        // Update char counter
+        const evt = new Event('input');
+        sourceText.dispatchEvent(evt);
+      }
+
+      // Spin animation
+      btn.classList.add('spinning');
+      setTimeout(() => btn.classList.remove('spinning'), 400);
+
+      // Clear previous result
+      hideOutput();
+    }
+
+    // ── Copy to Clipboard ────────────────────────────────────────────────────
+    async function copyResult() {
+      const text = document.getElementById('resultText').textContent;
+      if (!text) return;
+      const btn = document.getElementById('copyBtn');
+      try {
+        await navigator.clipboard.writeText(text);
+        btn.classList.add('copied');
+        btn.innerHTML = `
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          Copied!`;
+        setTimeout(() => {
+          btn.classList.remove('copied');
+          btn.innerHTML = `
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </svg>
+            Copy`;
+        }, 2000);
+      } catch (err) {
+        // Fallback for older browsers
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+    }
+
+    // ── Character counter ────────────────────────────────────────────────────
+    const sourceText = document.getElementById('sourceText');
+    const charCount  = document.getElementById('charCount');
+
+    sourceText.addEventListener('input', () => {
+      const len = sourceText.value.length;
+      charCount.textContent = `${len} / 5000`;
+      charCount.classList.remove('warn', 'over');
+      if (len > 4500) charCount.classList.add('warn');
+      if (len >= 5000) charCount.classList.add('over');
+    });
+
+    // Allow Ctrl+Enter to translate
+    sourceText.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) doTranslate();
+    });
+
+    // ── Core translate function ──────────────────────────────────────────────
+    async function doTranslate() {
+      const text   = sourceText.value.trim();
+      const source = document.getElementById('sourceLang').value;
+      const target = document.getElementById('targetLang').value;
+
+      if (!text) {
+        showError('Please enter some text to translate.');
+        return;
+      }
+      if (source !== 'auto' && source === target) {
+        showError('Source and target languages are the same. Please choose different languages.');
+        return;
+      }
+
+      setLoading(true);
+      hideOutput();
+
+      try {
+        const res = await fetch(`${API_BASE}/translate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, source_language: source, target_language: target }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          showError(data.detail || 'An unexpected error occurred.');
+          return;
+        }
+
+        showResult(data.translated_text, target, source === 'auto', data.detected_language);
+
+      } catch (err) {
+        showError('Network error: Could not reach the translation server. Is it running?');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    // ── UI helpers ───────────────────────────────────────────────────────────
+    function setLoading(loading) {
+      const btn = document.getElementById('translateBtn');
+      if (loading) {
+        btn.disabled = true;
+        btn.innerHTML = `<span class="spinner"></span>Translating…`;
+      } else {
+        btn.disabled = false;
+        btn.innerHTML = `Translate`;
+      }
+    }
+
+    function hideOutput() {
+      document.getElementById('outputSection').classList.add('hidden');
+      document.getElementById('errorBox').classList.add('hidden');
+      document.getElementById('resultBox').classList.add('hidden');
+    }
+
+    function showError(msg) {
+      const section  = document.getElementById('outputSection');
+      const errorBox = document.getElementById('errorBox');
+      section.classList.remove('hidden');
+      errorBox.classList.remove('hidden');
+      errorBox.textContent = `⚠ ${msg}`;
+      document.getElementById('resultBox').classList.add('hidden');
+    }
+
+    function showResult(text, targetCode, wasAutoDetect, detectedCode) {
+      const section       = document.getElementById('outputSection');
+      const resultBox     = document.getElementById('resultBox');
+      const resultTextEl  = document.getElementById('resultText');
+      const badge         = document.getElementById('resultLangBadge');
+      const wordBadge     = document.getElementById('wordCountBadge');
+      const detectedBadge = document.getElementById('detectedBadge');
+
+      // Get display name of target language
+      const sel = document.getElementById('targetLang');
+      const targetName = sel.options[sel.selectedIndex].text;
+
+      section.classList.remove('hidden');
+      document.getElementById('errorBox').classList.add('hidden');
+      resultBox.classList.remove('hidden');
+
+      // Reset copy button
+      const copyBtn = document.getElementById('copyBtn');
+      copyBtn.classList.remove('copied');
+      copyBtn.innerHTML = `
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+        </svg>
+        Copy`;
+
+      // Show/hide auto-detect badge
+      if (wasAutoDetect) {
+        detectedBadge.classList.remove('hidden');
+      } else {
+        detectedBadge.classList.add('hidden');
+      }
+
+      // Trigger re-animation
+      resultTextEl.classList.remove('fade-up');
+      void resultTextEl.offsetWidth;
+      resultTextEl.classList.add('fade-up');
+
+      resultTextEl.textContent = text;
+      badge.textContent = targetName;
+
+      const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
+      wordBadge.textContent = `${wordCount} word${wordCount !== 1 ? 's' : ''}`;
+
+      // Log to history (pass the actual source/target codes)
+      const srcCode = document.getElementById('sourceLang').value;
+      addToHistory(document.getElementById('sourceText').value.trim(), text, srcCode, targetCode);
+    }
+
+    // ── Phase 4: Audio — TTS & STT ───────────────────────────────────────────
+
+    // Map ISO codes → BCP-47 locale tags for Web Speech API
+    // For most codes they are identical; exceptions are listed below.
+    const ISO_TO_BCP47 = {
+      'zh-CN': 'zh-CN', 'zh-TW': 'zh-TW',
+      'iw':    'he',     // Hebrew: ISO 639-1 legacy → BCP-47
+      'jw':    'jv',     // Javanese
+    };
+    function getBcp47(isoCode) {
+      return ISO_TO_BCP47[isoCode] || isoCode;
+    }
+
+    // ── Text-to-Speech ───────────────────────────────────────────────────────
+    let currentUtterance = null;
+
+    function speakText(text, langCode, btnEl) {
+      if (!('speechSynthesis' in window)) {
+        alert('Sorry — your browser does not support Text-to-Speech.');
+        return;
+      }
+      // Toggle: if already speaking, stop
+      if (window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel();
+        resetSpeakBtn(btnEl);
+        return;
+      }
+
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang  = getBcp47(langCode);
+      utter.rate  = 0.95;
+      utter.pitch = 1;
+
+      utter.onstart = () => btnEl.classList.add('speaking');
+      utter.onend   = () => resetSpeakBtn(btnEl);
+      utter.onerror = () => resetSpeakBtn(btnEl);
+
+      currentUtterance = utter;
+      window.speechSynthesis.speak(utter);
+    }
+
+    function resetSpeakBtn(btnEl) {
+      if (btnEl) btnEl.classList.remove('speaking');
+    }
+
+    function speakSource() {
+      const text = document.getElementById('sourceText').value.trim();
+      if (!text) return;
+      const lang = document.getElementById('sourceLang').value;
+      const effectiveLang = (lang === 'auto') ? 'en' : lang;
+      speakText(text, effectiveLang, document.getElementById('listenSourceBtn'));
+    }
+
+    function speakResult() {
+      const text = document.getElementById('resultText').textContent.trim();
+      if (!text) return;
+      const lang = document.getElementById('targetLang').value;
+      speakText(text, lang, document.getElementById('listenResultBtn'));
+    }
+
+    // ── Speech-to-Text ───────────────────────────────────────────────────────
+    let recognition    = null;
+    let isRecording    = false;
+
+    function initSpeechRecognition() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) return null;
+      const rec          = new SpeechRecognition();
+      rec.continuous     = false;
+      rec.interimResults = true;
+      rec.maxAlternatives = 1;
+      return rec;
+    }
+
+    function toggleMic() {
+      const micBtn   = document.getElementById('micBtn');
+      const sttStatus = document.getElementById('sttStatus');
+
+      if (isRecording) {
+        // Stop recording
+        if (recognition) recognition.stop();
+        return;
+      }
+
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        alert('Sorry — your browser does not support Speech Recognition.\nTry Google Chrome, Microsoft Edge, or Brave.');
+        return;
+      }
+
+      recognition = initSpeechRecognition();
+      const srcLang = document.getElementById('sourceLang').value;
+      recognition.lang = getBcp47(srcLang === 'auto' ? 'en' : srcLang);
+
+      // Stop any active TTS before recording
+      if (window.speechSynthesis.speaking) window.speechSynthesis.cancel();
+
+      recognition.onstart = () => {
+        isRecording = true;
+        micBtn.classList.add('recording');
+        sttStatus.classList.add('active');
+      };
+
+      recognition.onresult = (event) => {
+        const srcEl = document.getElementById('sourceText');
+        let interimTranscript = '';
+        let finalTranscript   = '';
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) finalTranscript += transcript;
+          else interimTranscript += transcript;
+        }
+
+        // Show interim text immediately for feedback
+        srcEl.value = finalTranscript || interimTranscript;
+        srcEl.dispatchEvent(new Event('input'));
+      };
+
+      recognition.onend = () => {
+        isRecording = false;
+        micBtn.classList.remove('recording');
+        sttStatus.classList.remove('active');
+
+        // Auto-translate if we captured something
+        const captured = document.getElementById('sourceText').value.trim();
+        if (captured) doTranslate();
+      };
+
+      recognition.onerror = (event) => {
+        isRecording = false;
+        micBtn.classList.remove('recording');
+        sttStatus.classList.remove('active');
+
+        // Gracefully handle common errors
+        let errorMsg = '';
+        switch(event.error) {
+          case 'network':
+            errorMsg = 'Network error — Speech Recognition service unreachable. Check your internet connection or try disabling VPN/proxy.';
+            break;
+          case 'no-speech':
+          case 'aborted':
+            return;  // Silent — user stopped or no speech detected
+          case 'permission-denied':
+            errorMsg = 'Microphone permission denied. Please allow access in your browser settings.';
+            break;
+          default:
+            errorMsg = `Microphone error: ${event.error}`;
+        }
+
+        if (errorMsg) {
+          showError(errorMsg);
+          document.getElementById('outputSection').classList.remove('hidden');
+        }
+      };
+
+      recognition.start();
+    }
+
+    // Stop any speech when page/tab is hidden
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        if (window.speechSynthesis.speaking) window.speechSynthesis.cancel();
+        if (isRecording && recognition) recognition.stop();
+      }
+    });
+
+    // ── Phase 5: Document Translation ────────────────────────────────────────
+
+    let selectedDocFile = null;
+
+    // Populate document language dropdowns on load
+    function populateDocLanguages() {
+      const docSourceSel = document.getElementById('docSourceLang');
+      const docTargetSel = document.getElementById('docTargetLang');
+
+      docSourceSel.add(new Option('Auto-Detect', 'auto'));
+      docTargetSel.innerHTML = '';  // Clear (no auto for target)
+
+      const sorted = Array.from(document.getElementById('sourceLang').options)
+        .filter(opt => opt.value !== 'auto')
+        .map(opt => ({ text: opt.text, value: opt.value }))
+        .sort((a, b) => a.text.localeCompare(b.text));
+
+      sorted.forEach(({ text, value }) => {
+        docSourceSel.add(new Option(text, value));
+        docTargetSel.add(new Option(text, value));
+      });
+
+      docSourceSel.value = 'auto';
+      docTargetSel.value = 'es';
+    }
+
+    // Drag and drop for file upload
+    const dropZone = document.getElementById('docDropZone');
+
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('dragging');
+    });
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('dragging');
+    });
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragging');
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        document.getElementById('docFile').files = files;
+        handleDocFileSelect({ target: { files } });
+      }
+    });
+
+    function handleDocFileSelect(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      // Validate file type
+      const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+      if (!['.txt', '.docx'].includes(ext)) {
+        showDocStatus('Only .txt and .docx files are supported.', 'error');
+        return;
+      }
+
+      // Validate file size (max 10 MB)
+      if (file.size > 10 * 1024 * 1024) {
+        showDocStatus('File exceeds 10 MB limit.', 'error');
+        return;
+      }
+
+      selectedDocFile = file;
+      document.getElementById('docFileName').textContent = `📋 ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+      document.getElementById('docTranslateBtn').disabled = false;
+      hideDocStatus();
+    }
+
+    async function translateDocument() {
+      if (!selectedDocFile) {
+        showDocStatus('Please select a file first.', 'error');
+        return;
+      }
+
+      const sourceLang = document.getElementById('docSourceLang').value;
+      const targetLang = document.getElementById('docTargetLang').value;
+
+      if (!targetLang) {
+        showDocStatus('Please select a target language.', 'error');
+        return;
+      }
+
+      if (sourceLang !== 'auto' && sourceLang === targetLang) {
+        showDocStatus('Source and target languages must be different.', 'error');
+        return;
+      }
+
+      // Show loading state
+      const btn = document.getElementById('docTranslateBtn');
+      btn.disabled = true;
+      showDocStatus('Translating document… This may take a moment.', 'loading');
+
+      try {
+        const formData = new FormData();
+        formData.append('file', selectedDocFile);
+        formData.append('source_language', sourceLang);
+        formData.append('target_language', targetLang);
+
+        const response = await fetch(`${API_BASE}/translate-document`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.detail || 'Translation failed');
+        }
+
+        // Get filename from Content-Disposition header
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let filename = selectedDocFile.name;
+        if (contentDisposition) {
+          const match = contentDisposition.match(/filename=([^;]+)/);
+          if (match) filename = match[1].replace(/"/g, '');
+        }
+
+        // Download the file
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+
+        showDocStatus(`✓ Translation complete! Downloaded: ${filename}`, 'success');
+      } catch (err) {
+        showDocStatus(`Translation error: ${err.message}`, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function showDocStatus(msg, type) {
+      const status = document.getElementById('docStatus');
+      status.textContent = msg;
+      status.className = `doc-status active font-body ${type}`;
+    }
+
+    function hideDocStatus() {
+      document.getElementById('docStatus').classList.remove('active');
+    }
+
+    // ── Init ─────────────────────────────────────────────────────────────────
+    loadLanguages();
+    // Populate doc dropdowns after main languages load
+    setTimeout(() => populateDocLanguages(), 100);
+  </script>
+</body>
+</html>
