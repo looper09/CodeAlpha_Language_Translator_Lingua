@@ -1,8 +1,6 @@
-Here is your updated `README.md` file. I have kept all of your original formatting and content, but I inserted a prominent **Live Demo** section right at the top so recruiters can instantly test your app. I also slightly updated the "Common Questions" section to reflect your new Vercel deployment.
 
-You can copy and paste this entire block directly into your GitHub `README.md`:
 
-```markdown
+
 # Quick Start Guide — Language Translation Tool
 
 ## 🚀 Live Demo
