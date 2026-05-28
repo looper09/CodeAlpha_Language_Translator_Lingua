@@ -5,7 +5,7 @@
 
 ## 🚀 Live Demo
 You can access and test the fully functional application live here:
-🔗 **[Insert Your Vercel App URL Here]**
+🔗 https://code-alpha-language-translator-ling.vercel.app/
 
 *(Note: This live demo is hosted on Vercel. Standard text translation and audio features work instantly in the browser. However, translating massive documents might hit Vercel's 10-second serverless timeout limit. For very large files, local execution is recommended.)*
 
