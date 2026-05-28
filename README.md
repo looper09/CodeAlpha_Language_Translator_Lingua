@@ -308,17 +308,7 @@ A: Yes. Text is sent only to Google Translate (Google's privacy policy applies).
 
 ---
 
-**Ready to showcase this to CodeAlpha?** ✨
 
-You have a production-quality translation tool. Highlight:
-
-* ✅ Clean architecture (separation of concerns)
-* ✅ Anti-hallucination design (hardcoded dictionaries)
-* ✅ Advanced features (audio, documents, history)
-* ✅ Beautiful, responsive UI
-* ✅ Robust error handling
-
-Good luck! 🚀
 
 ```
 
